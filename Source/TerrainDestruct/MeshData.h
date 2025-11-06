@@ -12,6 +12,7 @@ struct FMeshData
 	TArray<FVector> Normals;
 	TArray<FColor> Colors;
 	TArray<FVector2D> UV0;
+	int32 VertexCount = 0;
 
 	void Clear();
 };

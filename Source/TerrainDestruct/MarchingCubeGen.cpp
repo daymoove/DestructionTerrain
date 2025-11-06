@@ -22,6 +22,7 @@ AMarchingCubeGen::~AMarchingCubeGen()
 	delete noise;
 }
 
+
 // Called when the game starts or when spawned
 void AMarchingCubeGen::BeginPlay()
 {
@@ -130,11 +131,11 @@ void AMarchingCubeGen::GenerateMeshSection(int zStart, int zEnd,FThreadMeshData&
 			{
 				for (int i = 0; i < 8; ++i)
 				{
-					Cube[i] = Voxels[GetVoxelIndex(
-						X + VertexOffset[i][0],
-						Y + VertexOffset[i][1],
-						Z + VertexOffset[i][2]
-					)];
+					int VX = X + VertexOffset[i][0];
+					int VY = Y + VertexOffset[i][1];
+					int VZ = Z + VertexOffset[i][2];
+
+					Cube[i] = GetVoxelDensityWithMods(VX, VY, VZ);
 				}
 				March(X, Y, Z, Cube,data);
 			}
@@ -148,7 +149,12 @@ void AMarchingCubeGen::March(int X, int Y, int Z, const float Cube[8],FThreadMes
     FVector EdgeVertex[12];
 
     for (int i = 0; i < 8; ++i)
-        if (Cube[i] <= surfaceLevel) VertexMask |= 1 << i; // Problem with mesh if noise not perlin need >= but thane perlin have problem
+    {
+        if (Cube[i] <= surfaceLevel) // Problem with mesh if noise not perlin need >= but thane perlin have problem
+        {
+        	VertexMask |= 1 << i;  
+        }  
+    }
 
     const int EdgeMask = CubeEdgeFlags[VertexMask];
     if (EdgeMask == 0) return;
@@ -284,6 +290,71 @@ void AMarchingCubeGen::ApplyMesh() // make comment
         TArray<FProcMeshTangent>(),
         true
     );
+}
+
+float AMarchingCubeGen::GetVoxelDensityWithMods(int X, int Y, int Z) const
+{
+	FIntVector Key(X, Y, Z);
+
+	// Base procedural density
+	float BaseDensity = Voxels[GetVoxelIndex(X, Y, Z)];
+
+	// Apply modification if exists
+	if (const float* Delta = modifications.Find(Key))
+	{
+		BaseDensity += *Delta;
+	}
+
+	return BaseDensity;
+}
+
+void AMarchingCubeGen::ModifyVoxel(const FVector& worldPos, float densityChange)
+{
+	FVector Local = (worldPos - GetActorLocation()) / 100.0f;
+	FIntVector VoxelIndex(
+		FMath::FloorToInt(Local.X),
+		FMath::FloorToInt(Local.Y),
+		FMath::FloorToInt(Local.Z)
+	);
+
+	modifications.Add(VoxelIndex, densityChange);
+	//SaveModifications();
+
+	// Rebuild mesh
+	TFuture<FThreadMeshData> Future = Async(EAsyncExecution::ThreadPool, [this]() -> FThreadMeshData
+	{
+		FThreadMeshData ThreadData;
+		ThreadData.Reset();
+
+		// Generate whole chunk (or restrict z-range if you like)
+		GenerateMeshSection(0, size, ThreadData);
+
+		return ThreadData;
+	});
+
+	// When the thread finishes, move the result onto the game thread and apply
+	AsyncTask(ENamedThreads::GameThread, [this, Future = MoveTemp(Future)]() mutable
+	{
+		// Get the generated mesh data from the worker thread
+		FThreadMeshData Result = Future.Get();
+
+		// Clear existing meshData and move each array/field into it.
+		// Avoid direct "meshData = Result;" to prevent type/assignment mismatches.
+		meshData.Clear();
+
+		// Move arrays if FThreadMeshData supports Move semantics (TArray supports MoveTemp)
+		meshData.Vertices = MoveTemp(Result.Vertices);
+		meshData.Triangles = MoveTemp(Result.Triangles);
+		meshData.Normals = MoveTemp(Result.Normals);
+		meshData.Colors = MoveTemp(Result.Colors);
+		//meshData.UV0      = MoveTemp(Result.UV0);
+
+		// Copy simple members
+		meshData.VertexCount = Result.VertexCount;
+
+		// Now apply the mesh to the ProceduralMeshComponent
+		ApplyMesh();
+	});
 }
 
 
