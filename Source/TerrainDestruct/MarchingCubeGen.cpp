@@ -1,3 +1,4 @@
+
 #include "MarchingCubeGen.h"
 #include "FastNoiseLite.h"
 #include "ProceduralMeshComponent.h"
@@ -106,7 +107,6 @@ void AMarchingCubeGen::GenerateHeightMap(const FVector position)
 		}
 	}
 }
-
 
 void AMarchingCubeGen::GenerateMeshSection(int zStart, int zEnd,FThreadMeshData& data)
 {
@@ -397,74 +397,16 @@ void AMarchingCubeGen::LoadModifications()
 	}
 }
 
-void AMarchingCubeGen::ModifyVoxel(const FVector& worldPos, float strength, float radius)
+void AMarchingCubeGen::ModifyVoxel(const FVector& worldPos, float editingSpeed, float brushRadius)
 {
-	// FVector Local = (worldPos - GetActorLocation()) / 100.0f;
- //
- //    int minX = FMath::FloorToInt(Local.X - radius);
- //    int maxX = FMath::CeilToInt(Local.X + radius);
- //    int minY = FMath::FloorToInt(Local.Y - radius);
- //    int maxY = FMath::CeilToInt(Local.Y + radius);
- //    int minZ = FMath::FloorToInt(Local.Z - radius);
- //    int maxZ = FMath::CeilToInt(Local.Z + radius);
- //
- //    for (int x = minX; x <= maxX; x++)
- //    {
- //        for (int y = minY; y <= maxY; y++)
- //        {
- //            for (int z = minZ; z <= maxZ; z++)
- //            {
- //                FVector voxelCenter(x + 0.5f, y + 0.5f, z + 0.5f);
- //                float dist = FVector::Dist(voxelCenter, Local);
- //
- //                if (dist < radius)
- //                {
- //                    // Smooth falloff using smoothstep (smoother than linear)
- //                    float t = 1.0f - FMath::Clamp(dist / radius, 0.0f, 1.0f);
- //                    float falloff = t * t * (3 - 2 * t); // Smoothstep falloff
- //
- //                    FIntVector voxelIndex(x, y, z);
- //                    float delta = strength * falloff;
- //
- //                    if (modifications.Contains(voxelIndex))
- //                        modifications[voxelIndex] += delta;
- //                    else
- //                        modifications.Add(voxelIndex, delta);
- //                }
- //            }
- //        }
- //    }
- //
- //    // Rebuild mesh asynchronously
- //    TFuture<FThreadMeshData> Future = Async(EAsyncExecution::ThreadPool, [this]() -> FThreadMeshData
- //    {
- //        FThreadMeshData ThreadData;
- //        ThreadData.Reset();
- //        GenerateMeshSection(0, size, ThreadData);
- //        return ThreadData;
- //    });
- //
- //    AsyncTask(ENamedThreads::GameThread, [this, Future = MoveTemp(Future)]() mutable
- //    {
- //        FThreadMeshData Result = Future.Get();
- //
- //        meshData.Clear();
- //        meshData.Vertices = MoveTemp(Result.Vertices);
- //        meshData.Triangles = MoveTemp(Result.Triangles);
- //        meshData.Normals = MoveTemp(Result.Normals);
- //        meshData.Colors = MoveTemp(Result.Colors);
- //        meshData.VertexCount = Result.VertexCount;
- //
- //        ApplyMesh();
- //    });
-	FVector Local = (worldPos - GetActorLocation()) / 100.0f;
+    FVector Local = (worldPos - GetActorLocation()) / 100.0f;
 
-    int minX = FMath::FloorToInt(Local.X - radius);
-    int maxX = FMath::CeilToInt(Local.X + radius);
-    int minY = FMath::FloorToInt(Local.Y - radius);
-    int maxY = FMath::CeilToInt(Local.Y + radius);
-    int minZ = FMath::FloorToInt(Local.Z - radius);
-    int maxZ = FMath::CeilToInt(Local.Z + radius);
+    int minX = FMath::FloorToInt(Local.X - brushRadius);
+    int maxX = FMath::CeilToInt(Local.X + brushRadius);
+    int minY = FMath::FloorToInt(Local.Y - brushRadius);
+    int maxY = FMath::CeilToInt(Local.Y + brushRadius);
+    int minZ = FMath::FloorToInt(Local.Z - brushRadius);
+    int maxZ = FMath::CeilToInt(Local.Z + brushRadius);
 
     for (int x = minX; x <= maxX; x++)
     {
@@ -475,24 +417,26 @@ void AMarchingCubeGen::ModifyVoxel(const FVector& worldPos, float strength, floa
                 FVector voxelCenter(x + 0.5f, y + 0.5f, z + 0.5f);
                 float dist = FVector::Dist(voxelCenter, Local);
 
-                if (dist < radius)
+                if (dist < brushRadius)
                 {
-                    float normalizedDist = FMath::Clamp(dist / radius, 0.0f, 1.0f);
+                    // Linear falloff (your formula)
+                    float falloff = 1.0f - (dist / brushRadius);
 
-                    // Gaussian-style falloff (smooth brush)
-                    float falloff = FMath::Exp(-normalizedDist * normalizedDist * 4.0f);
+                    // Density change per tick (smoother editing)
+                    float deltaDensity = falloff * editingSpeed * GetWorld()->DeltaTimeSeconds;
 
                     FIntVector voxelIndex(x, y, z);
+                    float& currentDensity = modifications.FindOrAdd(voxelIndex, 0.0f);
 
-                    // Blend toward target
-                    float& current = modifications.FindOrAdd(voxelIndex, 0.0f);
-                    current = FMath::Lerp(current, strength, falloff * 0.5f);
+                    // Apply density modification (raising or lowering terrain)
+                    currentDensity += deltaDensity;
                 }
             }
         }
     }
 
-    // Rebuild mesh asynchronously
+	SaveModifications();
+    // Async mesh rebuild
     TFuture<FThreadMeshData> Future = Async(EAsyncExecution::ThreadPool, [this]() -> FThreadMeshData
     {
         FThreadMeshData ThreadData;
@@ -500,8 +444,6 @@ void AMarchingCubeGen::ModifyVoxel(const FVector& worldPos, float strength, floa
         GenerateMeshSection(0, size, ThreadData);
         return ThreadData;
     });
-
-	SaveModifications();
 
     AsyncTask(ENamedThreads::GameThread, [this, Future = MoveTemp(Future)]() mutable
     {

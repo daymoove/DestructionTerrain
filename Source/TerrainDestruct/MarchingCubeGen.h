@@ -47,7 +47,7 @@ public:
 	TObjectPtr<UMaterialInterface> material;
 
 	//void ModifyVoxel(const FVector& worldPos, float densityChange); old
-	void ModifyVoxel(const FVector& worldPos, float strength, float radius);
+	void ModifyVoxel(const FVector& worldPos, float editingSpeed, float brushRadius);
 	void LoadModifications(); //save
 protected:
 	// Called when the game starts or when spawned

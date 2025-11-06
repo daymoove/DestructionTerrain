@@ -136,14 +136,14 @@ void APlayerCharacter::DestroyTerrain(const FInputActionValue& Value)
 
 	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
 	{
-		AMarchingCubeGen* Chunk = Cast<AMarchingCubeGen>(Hit.GetActor());
-		if (Chunk)
+		;
+		if (AMarchingCubeGen* chunk = Cast<AMarchingCubeGen>(Hit.GetActor()))
 		{
-			currentModifyTimer += GetWorld()->GetTimeSeconds();;
+			currentModifyTimer += GetWorld()->GetTimeSeconds();
 			if (currentModifyTimer > 0.2)
 			{
 				currentModifyTimer = 0.0f;
-				Chunk->ModifyVoxel(Hit.Location, -0.5f,2.0f);
+				chunk->ModifyVoxel(Hit.Location, -1.0f,4.0f);
 			}
 
 		}
