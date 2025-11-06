@@ -139,7 +139,13 @@ void APlayerCharacter::DestroyTerrain(const FInputActionValue& Value)
 		AMarchingCubeGen* Chunk = Cast<AMarchingCubeGen>(Hit.GetActor());
 		if (Chunk)
 		{
-			Chunk->ModifyVoxel(Hit.Location, DestroyStrength);
+			currentModifyTimer += GetWorld()->GetTimeSeconds();;
+			if (currentModifyTimer > 0.2)
+			{
+				currentModifyTimer = 0.0f;
+				Chunk->ModifyVoxel(Hit.Location, -0.5f,2.0f);
+			}
+
 		}
 	}
 }

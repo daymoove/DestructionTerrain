@@ -153,7 +153,7 @@ void AMarchingCubeGen::March(int X, int Y, int Z, const float Cube[8],FThreadMes
         if (Cube[i] <= surfaceLevel) // Problem with mesh if noise not perlin need >= but thane perlin have problem
         {
         	VertexMask |= 1 << i;  
-        }  
+        } 
     }
 
     const int EdgeMask = CubeEdgeFlags[VertexMask];
@@ -278,14 +278,14 @@ void AMarchingCubeGen::ApplyMesh() // make comment
         N.Normalize();
     }
 
-    // Finally, create the mesh section
+
     mesh->SetMaterial(0, material);
     mesh->CreateMeshSection(
         0,
         finalVertices,
         finalTriangles,
         finalNormals,
-        meshData.UV0,     // empty, unless you generate UVs
+        meshData.UV0,     
         finalColors,
         TArray<FProcMeshTangent>(),
         true
@@ -295,11 +295,9 @@ void AMarchingCubeGen::ApplyMesh() // make comment
 float AMarchingCubeGen::GetVoxelDensityWithMods(int X, int Y, int Z) const
 {
 	FIntVector Key(X, Y, Z);
-
-	// Base procedural density
+	
 	float BaseDensity = Voxels[GetVoxelIndex(X, Y, Z)];
-
-	// Apply modification if exists
+	
 	if (const float* Delta = modifications.Find(Key))
 	{
 		BaseDensity += *Delta;
@@ -308,53 +306,216 @@ float AMarchingCubeGen::GetVoxelDensityWithMods(int X, int Y, int Z) const
 	return BaseDensity;
 }
 
-void AMarchingCubeGen::ModifyVoxel(const FVector& worldPos, float densityChange)
+float AMarchingCubeGen::GetVoxelDensity(const FIntVector& LocalPos)
 {
-	FVector Local = (worldPos - GetActorLocation()) / 100.0f;
-	FIntVector VoxelIndex(
-		FMath::FloorToInt(Local.X),
-		FMath::FloorToInt(Local.Y),
-		FMath::FloorToInt(Local.Z)
+	// Procedural noise value
+	float NoiseValue = noise->GetNoise(
+	static_cast<float>(LocalPos.X),
+	static_cast<float>(LocalPos.Y),
+	static_cast<float>(LocalPos.Z)
+);
+
+	// Apply saved modification if exists
+	if (float* Delta = modifications.Find(LocalPos))
+	{
+		NoiseValue += *Delta;
+	}
+	return NoiseValue;
+}
+
+void AMarchingCubeGen::SaveModifications()
+{
+	if (modifications.Num() == 0)
+		return; // nothing to save
+
+	// Capture current state safely
+	TMap<FIntVector, float> ModCopy = modifications;
+
+	FString SaveDir = FPaths::ProjectSavedDir() / TEXT("VoxelChunks");
+	IFileManager::Get().MakeDirectory(*SaveDir, true);
+
+	FIntVector ChunkCoord(
+		FMath::FloorToInt(GetActorLocation().X / (size * 100)),
+		FMath::FloorToInt(GetActorLocation().Y / (size * 100)),
+		FMath::FloorToInt(GetActorLocation().Z / (size * 100))
 	);
 
-	modifications.Add(VoxelIndex, densityChange);
-	//SaveModifications();
+	FString FileName = FString::Printf(TEXT("%s/Chunk_%d_%d_%d.sav"),
+		*SaveDir, ChunkCoord.X, ChunkCoord.Y, ChunkCoord.Z);
 
-	// Rebuild mesh
-	TFuture<FThreadMeshData> Future = Async(EAsyncExecution::ThreadPool, [this]() -> FThreadMeshData
+	// Launch async file save
+	Async(EAsyncExecution::ThreadPool, [FileName, ModCopy = MoveTemp(ModCopy)]()
 	{
-		FThreadMeshData ThreadData;
-		ThreadData.Reset();
+		FString SaveData;
+		SaveData.Reserve(ModCopy.Num() * 32); // pre-allocate for efficiency
 
-		// Generate whole chunk (or restrict z-range if you like)
-		GenerateMeshSection(0, size, ThreadData);
+		for (const auto& Pair : ModCopy)
+		{
+			SaveData += FString::Printf(TEXT("%d,%d,%d,%f\n"),
+				Pair.Key.X, Pair.Key.Y, Pair.Key.Z, Pair.Value);
+		}
 
-		return ThreadData;
+		FFileHelper::SaveStringToFile(SaveData, *FileName);
 	});
+}
 
-	// When the thread finishes, move the result onto the game thread and apply
-	AsyncTask(ENamedThreads::GameThread, [this, Future = MoveTemp(Future)]() mutable
+void AMarchingCubeGen::LoadModifications()
+{
+	FString SaveDir = FPaths::ProjectSavedDir() / TEXT("VoxelChunks");
+
+	FIntVector ChunkCoord(
+		FMath::FloorToInt(GetActorLocation().X / (size * 100)),
+		FMath::FloorToInt(GetActorLocation().Y / (size * 100)),
+		FMath::FloorToInt(GetActorLocation().Z / (size * 100))
+	);
+
+	FString FileName = FString::Printf(TEXT("%s/Chunk_%d_%d_%d.sav"),
+		*SaveDir, ChunkCoord.X, ChunkCoord.Y, ChunkCoord.Z);
+
+	if (!FPaths::FileExists(FileName))
+		return;
+
+	FString LoadedData;
+	FFileHelper::LoadFileToString(LoadedData, *FileName);
+
+	TArray<FString> Lines;
+	LoadedData.ParseIntoArrayLines(Lines);
+
+	for (FString& Line : Lines)
 	{
-		// Get the generated mesh data from the worker thread
-		FThreadMeshData Result = Future.Get();
+		TArray<FString> Parts;
+		Line.ParseIntoArray(Parts, TEXT(","), true);
+		if (Parts.Num() != 4) continue;
 
-		// Clear existing meshData and move each array/field into it.
-		// Avoid direct "meshData = Result;" to prevent type/assignment mismatches.
-		meshData.Clear();
+		FIntVector Pos(
+			FCString::Atoi(*Parts[0]),
+			FCString::Atoi(*Parts[1]),
+			FCString::Atoi(*Parts[2])
+		);
+		float Density = FCString::Atof(*Parts[3]);
+		modifications.Add(Pos, Density);
+	}
+}
 
-		// Move arrays if FThreadMeshData supports Move semantics (TArray supports MoveTemp)
-		meshData.Vertices = MoveTemp(Result.Vertices);
-		meshData.Triangles = MoveTemp(Result.Triangles);
-		meshData.Normals = MoveTemp(Result.Normals);
-		meshData.Colors = MoveTemp(Result.Colors);
-		//meshData.UV0      = MoveTemp(Result.UV0);
+void AMarchingCubeGen::ModifyVoxel(const FVector& worldPos, float strength, float radius)
+{
+	// FVector Local = (worldPos - GetActorLocation()) / 100.0f;
+ //
+ //    int minX = FMath::FloorToInt(Local.X - radius);
+ //    int maxX = FMath::CeilToInt(Local.X + radius);
+ //    int minY = FMath::FloorToInt(Local.Y - radius);
+ //    int maxY = FMath::CeilToInt(Local.Y + radius);
+ //    int minZ = FMath::FloorToInt(Local.Z - radius);
+ //    int maxZ = FMath::CeilToInt(Local.Z + radius);
+ //
+ //    for (int x = minX; x <= maxX; x++)
+ //    {
+ //        for (int y = minY; y <= maxY; y++)
+ //        {
+ //            for (int z = minZ; z <= maxZ; z++)
+ //            {
+ //                FVector voxelCenter(x + 0.5f, y + 0.5f, z + 0.5f);
+ //                float dist = FVector::Dist(voxelCenter, Local);
+ //
+ //                if (dist < radius)
+ //                {
+ //                    // Smooth falloff using smoothstep (smoother than linear)
+ //                    float t = 1.0f - FMath::Clamp(dist / radius, 0.0f, 1.0f);
+ //                    float falloff = t * t * (3 - 2 * t); // Smoothstep falloff
+ //
+ //                    FIntVector voxelIndex(x, y, z);
+ //                    float delta = strength * falloff;
+ //
+ //                    if (modifications.Contains(voxelIndex))
+ //                        modifications[voxelIndex] += delta;
+ //                    else
+ //                        modifications.Add(voxelIndex, delta);
+ //                }
+ //            }
+ //        }
+ //    }
+ //
+ //    // Rebuild mesh asynchronously
+ //    TFuture<FThreadMeshData> Future = Async(EAsyncExecution::ThreadPool, [this]() -> FThreadMeshData
+ //    {
+ //        FThreadMeshData ThreadData;
+ //        ThreadData.Reset();
+ //        GenerateMeshSection(0, size, ThreadData);
+ //        return ThreadData;
+ //    });
+ //
+ //    AsyncTask(ENamedThreads::GameThread, [this, Future = MoveTemp(Future)]() mutable
+ //    {
+ //        FThreadMeshData Result = Future.Get();
+ //
+ //        meshData.Clear();
+ //        meshData.Vertices = MoveTemp(Result.Vertices);
+ //        meshData.Triangles = MoveTemp(Result.Triangles);
+ //        meshData.Normals = MoveTemp(Result.Normals);
+ //        meshData.Colors = MoveTemp(Result.Colors);
+ //        meshData.VertexCount = Result.VertexCount;
+ //
+ //        ApplyMesh();
+ //    });
+	FVector Local = (worldPos - GetActorLocation()) / 100.0f;
 
-		// Copy simple members
-		meshData.VertexCount = Result.VertexCount;
+    int minX = FMath::FloorToInt(Local.X - radius);
+    int maxX = FMath::CeilToInt(Local.X + radius);
+    int minY = FMath::FloorToInt(Local.Y - radius);
+    int maxY = FMath::CeilToInt(Local.Y + radius);
+    int minZ = FMath::FloorToInt(Local.Z - radius);
+    int maxZ = FMath::CeilToInt(Local.Z + radius);
 
-		// Now apply the mesh to the ProceduralMeshComponent
-		ApplyMesh();
-	});
+    for (int x = minX; x <= maxX; x++)
+    {
+        for (int y = minY; y <= maxY; y++)
+        {
+            for (int z = minZ; z <= maxZ; z++)
+            {
+                FVector voxelCenter(x + 0.5f, y + 0.5f, z + 0.5f);
+                float dist = FVector::Dist(voxelCenter, Local);
+
+                if (dist < radius)
+                {
+                    float normalizedDist = FMath::Clamp(dist / radius, 0.0f, 1.0f);
+
+                    // Gaussian-style falloff (smooth brush)
+                    float falloff = FMath::Exp(-normalizedDist * normalizedDist * 4.0f);
+
+                    FIntVector voxelIndex(x, y, z);
+
+                    // Blend toward target
+                    float& current = modifications.FindOrAdd(voxelIndex, 0.0f);
+                    current = FMath::Lerp(current, strength, falloff * 0.5f);
+                }
+            }
+        }
+    }
+
+    // Rebuild mesh asynchronously
+    TFuture<FThreadMeshData> Future = Async(EAsyncExecution::ThreadPool, [this]() -> FThreadMeshData
+    {
+        FThreadMeshData ThreadData;
+        ThreadData.Reset();
+        GenerateMeshSection(0, size, ThreadData);
+        return ThreadData;
+    });
+
+	SaveModifications();
+
+    AsyncTask(ENamedThreads::GameThread, [this, Future = MoveTemp(Future)]() mutable
+    {
+        FThreadMeshData Result = Future.Get();
+
+        meshData.Clear();
+        meshData.Vertices = MoveTemp(Result.Vertices);
+        meshData.Triangles = MoveTemp(Result.Triangles);
+        meshData.Normals = MoveTemp(Result.Normals);
+        meshData.Colors = MoveTemp(Result.Colors);
+        meshData.VertexCount = Result.VertexCount;
+
+        ApplyMesh();
+    });
 }
 
 

@@ -78,5 +78,5 @@ protected:
 private:
 	FVector CurrentMovementInput;
 	float VerticalInput;
-
+	float currentModifyTimer;
 };

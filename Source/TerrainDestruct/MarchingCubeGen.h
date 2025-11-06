@@ -46,7 +46,9 @@ public:
 	TMap<FIntVector, float> modifications;
 	TObjectPtr<UMaterialInterface> material;
 
-	void ModifyVoxel(const FVector& worldPos, float densityChange);
+	//void ModifyVoxel(const FVector& worldPos, float densityChange); old
+	void ModifyVoxel(const FVector& worldPos, float strength, float radius);
+	void LoadModifications(); //save
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -67,9 +69,13 @@ private:
 	void ClearMesh();
 	
 	void March(int X, int Y, int Z, const float cube[8], FThreadMeshData& data);
-	int GetVoxelIndex(int X, int Y, int Z) const;
+	int GetVoxelIndex(int X, int Y, int Z) const; //helper
 	float GetInterpolationOffset(float V1, float V2) const;
-	float GetVoxelDensityWithMods(int X, int Y, int Z) const;
+	float GetVoxelDensityWithMods(int X, int Y, int Z) const; //helper
+	float GetVoxelDensity(const FIntVector& LocalPos);
+	void SaveModifications(); //save
+
+
 
 	
 	const int VertexOffset[8][3] = {

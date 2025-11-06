@@ -2,7 +2,6 @@
 #include "MarchingCubeGen.h"
 #include "Kismet/GameplayStatics.h"
 
-// Sets default values
 AGenerateTerrain::AGenerateTerrain()
 {
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
@@ -92,7 +91,8 @@ void AGenerateTerrain::SpawnChunkAt(const FIntVector& chunkCoords)
 	chunk->frequency = frequency;
 	chunk->material = material;
 	chunk->size = size;
-
+	chunk->LoadModifications();
+	
 	UGameplayStatics::FinishSpawningActor(chunk, transform);
 
 	// Assign chunk to map
