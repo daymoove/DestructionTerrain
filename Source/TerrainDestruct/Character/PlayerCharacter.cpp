@@ -7,7 +7,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
-#include "MarchingCubeGen.h"
+#include "TerrainDestruct/Generation/MarchingCubeGen.h"
 
 
 // Sets default values
@@ -172,40 +172,40 @@ void APlayerCharacter::Tick(float DeltaTime)
 	}
 }
 
-// Called to bind functionality to input
+
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		// Bind Move Action (ZQSD)
+
 		if (MoveAction)
 		{
 			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
 			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &APlayerCharacter::Move);
 		}
 
-		// Bind Look Action (Mouse)
+
 		if (LookAction)
 		{
 			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Look);
 		}
 
-		// Bind Up Action (A key)
+
 		if (UpAction)
 		{
 			EnhancedInputComponent->BindAction(UpAction, ETriggerEvent::Triggered, this, &APlayerCharacter::MoveUp);
 			EnhancedInputComponent->BindAction(UpAction, ETriggerEvent::Completed, this, &APlayerCharacter::MoveUp);
 		}
 
-		// Bind Down Action (E key)
+
 		if (DownAction)
 		{
 			EnhancedInputComponent->BindAction(DownAction, ETriggerEvent::Triggered, this, &APlayerCharacter::MoveDown);
 			EnhancedInputComponent->BindAction(DownAction, ETriggerEvent::Completed, this, &APlayerCharacter::MoveDown);
 		}
 
-		// Bind Action Press (Left Click)
+
 		if (ActionPressed)
 		{
 			EnhancedInputComponent->BindAction(ActionPressed, ETriggerEvent::Triggered, this, &APlayerCharacter::DestroyTerrain);
@@ -216,4 +216,3 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		UE_LOG(LogTemp, Error, TEXT("Enhanced Input Component not found! Using legacy input system?"));
 	}
 }
-

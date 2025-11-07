@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "MeshData.h"
+#include "TerrainDestruct/Utils/MeshData.h"
 #include "MarchingCubeGen.generated.h"
 
 class FastNoiseLite;
@@ -53,7 +53,7 @@ protected:
 	
 	void Setup();
 	void GenerateHeightMap(const FVector position);
-	const void GenerateMesh(int zStart, int zEnd,FThreadMeshData& threadData);
+	void GenerateMesh(int zStart, int zEnd,FThreadMeshData& threadData);
 	
 	FastNoiseLite* noise;
 	FMeshData meshData;
@@ -69,7 +69,6 @@ private:
 	int GetVoxelIndex(int X, int Y, int Z) const; //helper
 	float GetInterpolationOffset(float V1, float V2) const;
 	float GetVoxelDensityWithModif(int X, int Y, int Z) const; //helper
-	float GetVoxelDensity(const FIntVector& LocalPos);
 	void SaveModifications(); //save
 	
 	

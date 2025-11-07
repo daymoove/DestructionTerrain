@@ -1,5 +1,5 @@
 #include "MarchingCubeGen.h"
-#include "FastNoiseLite.h"
+#include "TerrainDestruct/Utils/FastNoiseLite.h"
 #include "ProceduralMeshComponent.h"
 
 
@@ -111,7 +111,7 @@ void AMarchingCubeGen::GenerateHeightMap(const FVector position)
 	}
 }
 
-void const AMarchingCubeGen::GenerateMesh(int zStart, int zEnd,FThreadMeshData& data)
+void AMarchingCubeGen::GenerateMesh(int zStart, int zEnd,FThreadMeshData& data)
 {
 	if (surfaceLevel > 0.0f)
 	{
@@ -451,4 +451,3 @@ void AMarchingCubeGen::LoadModifications()
 		modifications.Add(Pos, Density);
 	}
 }
-
