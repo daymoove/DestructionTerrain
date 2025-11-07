@@ -36,26 +36,24 @@ public:
 	// Sets default values for this actor's properties
 	AMarchingCubeGen();
 	~AMarchingCubeGen();
-	UPROPERTY(EditDefaultsOnly, Category="Marching Cubes") //need change
-	float surfaceLevel = 0.0f;
-	
-	UPROPERTY(EditDefaultsOnly, Category="Chunk") //need change
-	int size = 64;
 
+	float surfaceLevel;
+	int size;
 	float frequency;
+	
 	TMap<FIntVector, float> modifications;
 	TObjectPtr<UMaterialInterface> material;
 
 	//void ModifyVoxel(const FVector& worldPos, float densityChange); old
 	void ModifyVoxel(const FVector& worldPos, float editingSpeed, float brushRadius);
 	void LoadModifications(); //save
+	
 protected:
-	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 	
 	void Setup();
 	void GenerateHeightMap(const FVector position);
-	void GenerateMeshSection(int zStart, int zEnd,FThreadMeshData& threadData);
+	const void GenerateMesh(int zStart, int zEnd,FThreadMeshData& threadData);
 	
 	FastNoiseLite* noise;
 	FMeshData meshData;
@@ -66,17 +64,14 @@ private:
 	int TriangleOrder[3] = {0, 1, 2};
 	
 	void ApplyMesh();
-	void ClearMesh();
 	
 	void March(int X, int Y, int Z, const float cube[8], FThreadMeshData& data);
 	int GetVoxelIndex(int X, int Y, int Z) const; //helper
 	float GetInterpolationOffset(float V1, float V2) const;
-	float GetVoxelDensityWithMods(int X, int Y, int Z) const; //helper
+	float GetVoxelDensityWithModif(int X, int Y, int Z) const; //helper
 	float GetVoxelDensity(const FIntVector& LocalPos);
 	void SaveModifications(); //save
-
-
-
+	
 	
 	const int VertexOffset[8][3] = {
 		{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0},

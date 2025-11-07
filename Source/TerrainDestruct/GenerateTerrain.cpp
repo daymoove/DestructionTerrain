@@ -67,7 +67,6 @@ void AGenerateTerrain::GenerateWorld()
 	}
 }
 
-
 FIntVector AGenerateTerrain::GetPlayerChunk() const
 {
 	FVector PlayerPos = GetWorld()->GetFirstPlayerController()->GetPawn()->GetActorLocation();
@@ -91,9 +90,12 @@ void AGenerateTerrain::SpawnChunkAt(const FIntVector& chunkCoords)
 	chunk->frequency = frequency;
 	chunk->material = material;
 	chunk->size = size;
+	chunk->surfaceLevel = surfaceLevel;
 	chunk->LoadModifications();
 	
 	UGameplayStatics::FinishSpawningActor(chunk, transform);
+
+
 
 	// Assign chunk to map
 	LoadedChunks[chunkCoords] = chunk;

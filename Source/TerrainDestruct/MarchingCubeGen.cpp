@@ -1,4 +1,3 @@
-
 #include "MarchingCubeGen.h"
 #include "FastNoiseLite.h"
 #include "ProceduralMeshComponent.h"
@@ -54,7 +53,7 @@ void AMarchingCubeGen::BeginPlay()
             {
                 FThreadMeshData threadData;
                 threadData.Reset();
-                GenerateMeshSection(zStart, zEnd, threadData);
+                GenerateMesh(zStart, zEnd, threadData);
                 return threadData;
             }));
         }
@@ -102,13 +101,17 @@ void AMarchingCubeGen::GenerateHeightMap(const FVector position)
 		{
 			for (int z = 0; z <= size; ++z)
 			{
-				Voxels[GetVoxelIndex(x,y,z)] = noise->GetNoise(x + position.X, y + position.Y, z + position.Z);	
+				Voxels[GetVoxelIndex(x,y,z)] = noise->GetNoise(
+					x + position.X, 
+					y + position.Y, 
+					z + position.Z
+				);	
 			}
 		}
 	}
 }
 
-void AMarchingCubeGen::GenerateMeshSection(int zStart, int zEnd,FThreadMeshData& data)
+void const AMarchingCubeGen::GenerateMesh(int zStart, int zEnd,FThreadMeshData& data)
 {
 	if (surfaceLevel > 0.0f)
 	{
@@ -135,7 +138,7 @@ void AMarchingCubeGen::GenerateMeshSection(int zStart, int zEnd,FThreadMeshData&
 					int VY = Y + VertexOffset[i][1];
 					int VZ = Z + VertexOffset[i][2];
 
-					Cube[i] = GetVoxelDensityWithMods(VX, VY, VZ);
+					Cube[i] = GetVoxelDensityWithModif(VX, VY, VZ);
 				}
 				March(X, Y, Z, Cube,data);
 			}
@@ -150,7 +153,7 @@ void AMarchingCubeGen::March(int X, int Y, int Z, const float Cube[8],FThreadMes
 
     for (int i = 0; i < 8; ++i)
     {
-        if (Cube[i] <= surfaceLevel) // Problem with mesh if noise not perlin need >= but thane perlin have problem
+        if (Cube[i] <= surfaceLevel)
         {
         	VertexMask |= 1 << i;  
         } 
@@ -209,19 +212,20 @@ float AMarchingCubeGen::GetInterpolationOffset(float V1, float V2) const
 	return FMath::Clamp(t, 0.0f, 1.0f);
 }
 
-void AMarchingCubeGen::ApplyMesh() // make comment
+void AMarchingCubeGen::ApplyMesh() 
 {
+	
 	TMap<FIntVector, int32> vertexLookup;
 
-    // You can tune this based on your scale (smaller = stricter merging)
-    const float precision = 0.1f; 
 
-    // Prepare new arrays
+    const float precision = 0.001f; 
+
+
     TArray<FVector> finalVertices;
     TArray<FVector> finalNormals;
     TArray<FColor>  finalColors;
     TArray<int32>   finalTriangles;
-
+	
     auto Quantize = [&](const FVector& v)
     {
         return FIntVector(
@@ -251,26 +255,30 @@ void AMarchingCubeGen::ApplyMesh() // make comment
     };
 
     // Rebuild triangles with deduplication
-    for (int32 i = 0; i < meshData.Triangles.Num(); i += 3)
-    {
-        const FVector& V1 = meshData.Vertices[meshData.Triangles[i]];
-        const FVector& V2 = meshData.Vertices[meshData.Triangles[i + 1]];
-        const FVector& V3 = meshData.Vertices[meshData.Triangles[i + 2]];
+	for (int32 i = 0; i < meshData.Triangles.Num(); i += 3)
+	{
+		int32 i1 = GetOrAddVertex(
+			meshData.Vertices[meshData.Triangles[i]],
+			meshData.Normals[meshData.Triangles[i]],
+			meshData.Colors[meshData.Triangles[i]]
+		);
+		int32 i2 = GetOrAddVertex(
+			meshData.Vertices[meshData.Triangles[i + 1]],
+			meshData.Normals[meshData.Triangles[i + 1]],
+			meshData.Colors[meshData.Triangles[i + 1]]
+		);
+		int32 i3 = GetOrAddVertex(
+			meshData.Vertices[meshData.Triangles[i + 2]],
+			meshData.Normals[meshData.Triangles[i + 2]],
+			meshData.Colors[meshData.Triangles[i + 2]]
+		);
 
-        const FVector& N1 = meshData.Normals[meshData.Triangles[i]];
-        const FVector& N2 = meshData.Normals[meshData.Triangles[i + 1]];
-        const FVector& N3 = meshData.Normals[meshData.Triangles[i + 2]];
-
-        const FColor& C1 = meshData.Colors[meshData.Triangles[i]];
-        const FColor& C2 = meshData.Colors[meshData.Triangles[i + 1]];
-        const FColor& C3 = meshData.Colors[meshData.Triangles[i + 2]];
-
-        int32 i1 = GetOrAddVertex(V1, N1, C1);
-        int32 i2 = GetOrAddVertex(V2, N2, C2);
-        int32 i3 = GetOrAddVertex(V3, N3, C3);
-
-        finalTriangles.Append({ i1, i2, i3 });
-    }
+		// Skip degenerate triangles
+		if (i1 != i2 && i2 != i3 && i3 != i1)
+		{
+			finalTriangles.Append({i1, i2, i3});
+		}
+	}
 
     // Normalize accumulated normals
     for (FVector& N : finalNormals)
@@ -292,7 +300,7 @@ void AMarchingCubeGen::ApplyMesh() // make comment
     );
 }
 
-float AMarchingCubeGen::GetVoxelDensityWithMods(int X, int Y, int Z) const
+float AMarchingCubeGen::GetVoxelDensityWithModif(int X, int Y, int Z) const
 {
 	FIntVector Key(X, Y, Z);
 	
@@ -306,21 +314,68 @@ float AMarchingCubeGen::GetVoxelDensityWithMods(int X, int Y, int Z) const
 	return BaseDensity;
 }
 
-float AMarchingCubeGen::GetVoxelDensity(const FIntVector& LocalPos)
-{
-	// Procedural noise value
-	float NoiseValue = noise->GetNoise(
-	static_cast<float>(LocalPos.X),
-	static_cast<float>(LocalPos.Y),
-	static_cast<float>(LocalPos.Z)
-);
 
-	// Apply saved modification if exists
-	if (float* Delta = modifications.Find(LocalPos))
-	{
-		NoiseValue += *Delta;
-	}
-	return NoiseValue;
+void AMarchingCubeGen::ModifyVoxel(const FVector& worldPos, float editingSpeed, float brushRadius)
+{
+    FVector Local = (worldPos - GetActorLocation()) / 100.0f;
+
+    int minX = FMath::FloorToInt(Local.X - brushRadius);
+    int maxX = FMath::CeilToInt(Local.X + brushRadius);
+    int minY = FMath::FloorToInt(Local.Y - brushRadius);
+    int maxY = FMath::CeilToInt(Local.Y + brushRadius);
+    int minZ = FMath::FloorToInt(Local.Z - brushRadius);
+    int maxZ = FMath::CeilToInt(Local.Z + brushRadius);
+
+    for (int x = minX; x <= maxX; x++)
+    {
+        for (int y = minY; y <= maxY; y++)
+        {
+            for (int z = minZ; z <= maxZ; z++)
+            {
+                FVector voxelCenter(x + 0.5f, y + 0.5f, z + 0.5f);
+                float dist = FVector::Dist(voxelCenter, Local);
+
+                if (dist < brushRadius)
+                {
+                    // Linear falloff (your formula)
+                    float falloff = 1.0f - (dist / brushRadius);
+
+                    // Density change per tick (smoother editing)
+                    float deltaDensity = falloff * editingSpeed * GetWorld()->DeltaTimeSeconds;
+
+                    FIntVector voxelIndex(x, y, z);
+                    float& currentDensity = modifications.FindOrAdd(voxelIndex, 0.0f);
+
+                    // Apply density modification (raising or lowering terrain)
+                    currentDensity += deltaDensity;
+                }
+            }
+        }
+    }
+
+	SaveModifications();
+    // Async mesh rebuild
+    TFuture<FThreadMeshData> Future = Async(EAsyncExecution::ThreadPool, [this]() -> FThreadMeshData
+    {
+        FThreadMeshData ThreadData;
+        ThreadData.Reset();
+        GenerateMesh(0, size, ThreadData);
+        return ThreadData;
+    });
+
+    AsyncTask(ENamedThreads::GameThread, [this, Future = MoveTemp(Future)]() mutable
+    {
+        FThreadMeshData Result = Future.Get();
+
+        meshData.Clear();
+        meshData.Vertices = MoveTemp(Result.Vertices);
+        meshData.Triangles = MoveTemp(Result.Triangles);
+        meshData.Normals = MoveTemp(Result.Normals);
+        meshData.Colors = MoveTemp(Result.Colors);
+        meshData.VertexCount = Result.VertexCount;
+    	
+        ApplyMesh();
+    });
 }
 
 void AMarchingCubeGen::SaveModifications()
@@ -397,72 +452,3 @@ void AMarchingCubeGen::LoadModifications()
 	}
 }
 
-void AMarchingCubeGen::ModifyVoxel(const FVector& worldPos, float editingSpeed, float brushRadius)
-{
-    FVector Local = (worldPos - GetActorLocation()) / 100.0f;
-
-    int minX = FMath::FloorToInt(Local.X - brushRadius);
-    int maxX = FMath::CeilToInt(Local.X + brushRadius);
-    int minY = FMath::FloorToInt(Local.Y - brushRadius);
-    int maxY = FMath::CeilToInt(Local.Y + brushRadius);
-    int minZ = FMath::FloorToInt(Local.Z - brushRadius);
-    int maxZ = FMath::CeilToInt(Local.Z + brushRadius);
-
-    for (int x = minX; x <= maxX; x++)
-    {
-        for (int y = minY; y <= maxY; y++)
-        {
-            for (int z = minZ; z <= maxZ; z++)
-            {
-                FVector voxelCenter(x + 0.5f, y + 0.5f, z + 0.5f);
-                float dist = FVector::Dist(voxelCenter, Local);
-
-                if (dist < brushRadius)
-                {
-                    // Linear falloff (your formula)
-                    float falloff = 1.0f - (dist / brushRadius);
-
-                    // Density change per tick (smoother editing)
-                    float deltaDensity = falloff * editingSpeed * GetWorld()->DeltaTimeSeconds;
-
-                    FIntVector voxelIndex(x, y, z);
-                    float& currentDensity = modifications.FindOrAdd(voxelIndex, 0.0f);
-
-                    // Apply density modification (raising or lowering terrain)
-                    currentDensity += deltaDensity;
-                }
-            }
-        }
-    }
-
-	SaveModifications();
-    // Async mesh rebuild
-    TFuture<FThreadMeshData> Future = Async(EAsyncExecution::ThreadPool, [this]() -> FThreadMeshData
-    {
-        FThreadMeshData ThreadData;
-        ThreadData.Reset();
-        GenerateMeshSection(0, size, ThreadData);
-        return ThreadData;
-    });
-
-    AsyncTask(ENamedThreads::GameThread, [this, Future = MoveTemp(Future)]() mutable
-    {
-        FThreadMeshData Result = Future.Get();
-
-        meshData.Clear();
-        meshData.Vertices = MoveTemp(Result.Vertices);
-        meshData.Triangles = MoveTemp(Result.Triangles);
-        meshData.Normals = MoveTemp(Result.Normals);
-        meshData.Colors = MoveTemp(Result.Colors);
-        meshData.VertexCount = Result.VertexCount;
-
-        ApplyMesh();
-    });
-}
-
-
-void AMarchingCubeGen::ClearMesh()
-{
-	vertexCount = 0;
-	meshData.Clear();
-}

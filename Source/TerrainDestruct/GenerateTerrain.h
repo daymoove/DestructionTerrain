@@ -17,13 +17,16 @@ public:
 	AGenerateTerrain();
 
 	UPROPERTY(EditInstanceOnly, Category="Generation")
+	float surfaceLevel = 0;
+	
+	UPROPERTY(EditInstanceOnly, Category="Generation")
 	int drawDistance = 5;
 	
 	UPROPERTY(EditInstanceOnly, Category="Generation")
 	float frequency = 0.03f;
 	
 	UPROPERTY(EditInstanceOnly, Category="Generation")
-	int size = 32;
+	int size = 16;
 
 	UPROPERTY(EditInstanceOnly, Category="Generation")
 	TObjectPtr<UMaterialInterface> material;
@@ -35,6 +38,8 @@ public:
 	int32 ChunkLoadPerFrame = 4;  // How many chunks to spawn per frame
 
 	TQueue<FIntVector> PendingChunks; // Queue of chunks to generate
+
+
 	
 protected:
 	// Called when the game starts or when spawned
