@@ -9,6 +9,8 @@ Projet de génération procédural basé sur l'algorithme marching cubes avec te
 - Monde infinie
 - Génération avec chunk
 
+Pour reset la sauvegarde suprimer le dossier save dans le projet.
+
 ## Commande
 
 Déplacement: ZQSD
