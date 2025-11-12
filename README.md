@@ -2,6 +2,8 @@
 
 ## Le projet
 
+Version de Unreal utilisé: 5.6.1
+
 Projet de génération procédural basé sur l'algorithme marching cubes avec terrain destructible, qui inclut:
 - Génération d'un mesh procédural via l'algorithme marching cubes basé sur une height map 3D
 - Outil de destruction de terrain qui modifie le mesh
